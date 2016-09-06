@@ -4,6 +4,7 @@ import logging
 import requests
 
 from datetime import timedelta
+from django.conf import settings
 from django.utils import timezone
 
 from allauth.socialaccount import app_settings, providers
@@ -24,6 +25,9 @@ from .provider import GRAPH_API_URL, FacebookProvider
 
 logger = logging.getLogger(__name__)
 
+REQUIRE_APP_SECRET = getattr(settings, 'SOCIALACCOUNT_PROVIDERS', {}).get(
+    'facebook', {}).get('REQUIRE_APP_SECRET', False)
+
 
 def compute_appsecret_proof(app, token):
     # Generate an appsecret_proof parameter to secure the Graph API call
@@ -39,13 +43,13 @@ def compute_appsecret_proof(app, token):
 
 def fb_complete_login(request, app, token):
     provider = providers.registry.by_id(FacebookProvider.id, request)
-    resp = requests.get(
-        GRAPH_API_URL + '/me',
-        params={
-            'fields': ','.join(provider.get_fields()),
-            'access_token': token.token,
-            'appsecret_proof': compute_appsecret_proof(app, token)
-        })
+    params = {
+        'fields': ','.join(provider.get_fields()),
+        'access_token': token.token,
+    }
+    if REQUIRE_APP_SECRET is True:
+        params['appsecret_proof'] = compute_appsecret_proof(app, token)
+    resp = requests.get(GRAPH_API_URL + '/me', params=params)
     resp.raise_for_status()
     extra_data = resp.json()
     login = provider.sociallogin_from_response(request, extra_data)
